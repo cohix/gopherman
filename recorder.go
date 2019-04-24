@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/cohix/gopherman/postman"
+	"github.com/pkg/errors"
 )
 
 // RequestRecorder allows requests to an http server to be recorded
@@ -57,7 +57,7 @@ func (rr *RequestRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(fakeWriter.StatusCode)
 
 	item := postman.CollectionItem{
-		Name:    r.URL.RequestURI(),
+		Name:    fmt.Sprintf("%s %s", r.Method, r.URL.RequestURI()),
 		Request: *req,
 	}
 
@@ -107,7 +107,9 @@ func (rr *RequestRecorder) handleTerminate(w http.ResponseWriter, r *http.Reques
 	}
 
 	fmt.Printf("RequestRecorder wrote collection to %s", filepath)
+
 	w.WriteHeader(http.StatusOK)
+	w.Write(collectionJSON)
 }
 
 func (rr *RequestRecorder) isStarted() bool {

@@ -112,9 +112,7 @@ func (c *Collection) ItemWithName(name string) *CollectionItem {
 }
 
 // RequestFromHTTP converts an http request to a postman request
-func RequestFromHTTP(httpReq *http.Request) (*Request, error) {
-	r := *httpReq
-
+func RequestFromHTTP(r *http.Request) (*Request, error) {
 	req := Request{
 		Method: r.Method,
 		URL: URL{
@@ -141,8 +139,18 @@ func RequestFromHTTP(httpReq *http.Request) (*Request, error) {
 
 	req.Header = headers
 
-	defer r.Body.Close()
-	body, err := ioutil.ReadAll(r.Body)
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to ReadAll")
+	}
+
+	// create a copy for ourselves
+	bodyCopy := ioutil.NopCloser(bytes.NewBuffer(buf))
+
+	// put a second copy back into the request for the actual handler to use
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
+
+	body, err := ioutil.ReadAll(bodyCopy)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to ReadAll")
 	}
@@ -158,14 +166,36 @@ func RequestFromHTTP(httpReq *http.Request) (*Request, error) {
 }
 
 // ToHTTPRequest converts a postman request to an http request
-func (r *Request) ToHTTPRequest() *http.Request {
-	req, err := http.NewRequest(r.Method, r.URL.Raw, bytes.NewBuffer([]byte(r.Body.Raw)))
+func (r *Request) ToHTTPRequest(vars map[string]string) *http.Request {
+	tmplAddr, err := SubstVars(r.URL.Raw, vars)
+	if err != nil {
+		tmplAddr = r.URL.Raw
+	}
+
+	req, err := http.NewRequest(r.Method, tmplAddr, bytes.NewBuffer([]byte(r.Body.Raw)))
 	if err != nil {
 		return nil
 	}
 
-	for _, h := range r.Header {
-		req.Header.Add(h.Key, h.Value)
+	if vars != nil {
+		for _, h := range r.Header {
+			tmplKey, err := SubstVars(h.Key, vars)
+			if err != nil {
+				tmplKey = h.Key
+			}
+
+			tmplVal, err := SubstVars(h.Value, vars)
+			if err != nil {
+				tmplVal = h.Value
+			}
+
+			req.Header.Add(tmplKey, tmplVal)
+		}
+
+	} else {
+		for _, h := range r.Header {
+			req.Header.Add(h.Key, h.Value)
+		}
 	}
 
 	return req
@@ -173,6 +203,10 @@ func (r *Request) ToHTTPRequest() *http.Request {
 
 // ToInterface unmarshals a response into an interface
 func (r *Response) ToInterface(out interface{}) error {
+	if out == nil {
+		return nil
+	}
+
 	if err := json.Unmarshal([]byte(r.Raw), out); err != nil {
 		return err
 	}
