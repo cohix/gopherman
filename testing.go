@@ -6,10 +6,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"testing"
 
 	"github.com/pkg/errors"
 
 	"github.com/cohix/gopherman/postman"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // Tester represents a collection test tool
@@ -56,7 +59,7 @@ func NewTesterWithCollection(path string, envFile string, files ...string) (*Tes
 }
 
 // TestRequestWithName finds the named request in the collection, makes the same request, and then returns the request, expected response, and actual response
-func (t *Tester) TestRequestWithName(name string, handler func(*ErrCollector, *postman.Request, *postman.Response, *postman.Response)) []error {
+func (t *Tester) TestRequestWithName(name string, tst *testing.T, handler func(*TestHelper, *postman.Request, *postman.Response, *postman.Response)) []error {
 	vars := t.Environment.VariableMap()
 
 	tmplHost, err := postman.SubstVars("{{ .BaseUrl }}:{{ .Port }}", vars)
@@ -68,19 +71,19 @@ func (t *Tester) TestRequestWithName(name string, handler func(*ErrCollector, *p
 	errs := []error{}
 
 	for _, collection := range t.Collections {
-		collector := &ErrCollector{Errors: []error{}}
+		helper := NewTestHelper(tst)
 
 		// put this in a func so that critical errors can be collected and then bail out
 		func() {
 			itm := collection.ItemWithName(name)
 			if itm == nil {
-				collector.Error(fmt.Errorf("item with name %s doesn't exist", name))
+				helper.Error(fmt.Errorf("item with name %s doesn't exist", name))
 				return
 			}
 
 			httpReq := itm.Request.ToHTTPRequest(vars)
 			if httpReq == nil {
-				collector.Error(errors.New("failed to build HTTP request"))
+				helper.Error(errors.New("failed to build HTTP request"))
 				return
 			}
 
@@ -89,15 +92,15 @@ func (t *Tester) TestRequestWithName(name string, handler func(*ErrCollector, *p
 
 			actual, err := makeRequest(t.Client, httpReq)
 			if err != nil {
-				collector.Error(err)
+				helper.Error(err)
 				return
 			}
 
-			handler(collector, &itm.Request, &itm.Response[0], actual)
+			handler(helper, &itm.Request, &itm.Response[0], actual)
 		}()
 
-		if len(collector.Errors) > 0 {
-			for _, e := range collector.Errors {
+		if len(helper.Errors) > 0 {
+			for _, e := range helper.Errors {
 				wrapped := errors.Wrapf(e, "(collection %s, request %s)", collection.Info.Name, name)
 				errs = append(errs, wrapped)
 			}
@@ -136,16 +139,27 @@ func makeRequest(client *http.Client, req *http.Request) (*postman.Response, err
 	return actual, nil
 }
 
-// ErrCollector collects errors
-type ErrCollector struct {
+// TestHelper helps with running tests
+type TestHelper struct {
+	Assert *assert.Assertions
 	Errors []error
 }
 
-func (e *ErrCollector) Error(err error) {
-	e.Errors = append(e.Errors, err)
+// NewTestHelper creates a new test helper
+func NewTestHelper(t *testing.T) *TestHelper {
+	helper := &TestHelper{
+		Assert: assert.New(t),
+		Errors: []error{},
+	}
+
+	return helper
+}
+
+func (t *TestHelper) Error(err error) {
+	t.Errors = append(t.Errors, err)
 }
 
 // Log logs something
-func (e *ErrCollector) Log(msg string) {
+func (t *TestHelper) Log(msg string) {
 	fmt.Println(msg)
 }
