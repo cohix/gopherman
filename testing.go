@@ -99,11 +99,8 @@ func (t *Tester) TestRequestWithName(name string, tst *testing.T, handler func(*
 			handler(helper, &itm.Request, &itm.Response[0], actual)
 		}()
 
-		if len(helper.Errors) > 0 {
-			for _, e := range helper.Errors {
-				wrapped := errors.Wrapf(e, "(collection %s, request %s)", collection.Info.Name, name)
-				errs = append(errs, wrapped)
-			}
+		if helper.HasErrors() {
+			errs = append(errs, helper.AnnotateErrors(collection.Info.Name, name)...)
 		}
 	}
 
@@ -139,27 +136,57 @@ func makeRequest(client *http.Client, req *http.Request) (*postman.Response, err
 	return actual, nil
 }
 
+////////// helper functions //////////
+
+// AssertErrors loops through the collected errors and t.Error's each of them
+func AssertErrors(t *testing.T, errs []error) {
+	for _, e := range errs {
+		t.Error(e)
+	}
+}
+
+///////// TestHelper //////////////
+
 // TestHelper helps with running tests
 type TestHelper struct {
 	Assert *assert.Assertions
-	Errors []error
+	t      *testing.T
+	errors []error
 }
 
 // NewTestHelper creates a new test helper
 func NewTestHelper(t *testing.T) *TestHelper {
 	helper := &TestHelper{
 		Assert: assert.New(t),
-		Errors: []error{},
+		t:      t,
+		errors: []error{},
 	}
 
 	return helper
 }
 
+// HasErrors returns true if the testhelper has errors
+func (t *TestHelper) HasErrors() bool {
+	return len(t.errors) > 0
+}
+
 func (t *TestHelper) Error(err error) {
-	t.Errors = append(t.Errors, err)
+	t.errors = append(t.errors, err)
 }
 
 // Log logs something
 func (t *TestHelper) Log(msg string) {
-	fmt.Println(msg)
+	t.t.Log(msg)
+}
+
+// AnnotateErrors adds collection and test names to errors held by t
+func (t *TestHelper) AnnotateErrors(collectionName, testName string) []error {
+	errs := []error{}
+
+	for _, e := range t.errors {
+		wrapped := errors.Wrapf(e, "(collection %s, request %s)", collectionName, testName)
+		errs = append(errs, wrapped)
+	}
+
+	return errs
 }
