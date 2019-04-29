@@ -22,6 +22,13 @@ type RequestRecorder struct {
 	startTime *time.Time
 }
 
+func (rr *RequestRecorder) reset() {
+	rr.reqs = []postman.CollectionItem{}
+	now := time.Now()
+	rr.startTime = &now
+	return
+}
+
 // NewRequestRecorder returns a recorder ready to be used
 func NewRequestRecorder(mux http.Handler) *RequestRecorder {
 	rr := RequestRecorder{
@@ -35,6 +42,11 @@ func NewRequestRecorder(mux http.Handler) *RequestRecorder {
 func (rr *RequestRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/gopherman-terminate" {
 		rr.handleTerminate(w, r)
+		return
+	}
+
+	if r.URL.Path == "/gopherman-reset" {
+		rr.handleReset(w, r)
 		return
 	}
 
@@ -110,6 +122,21 @@ func (rr *RequestRecorder) handleTerminate(w http.ResponseWriter, r *http.Reques
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(collectionJSON)
+}
+
+func (rr *RequestRecorder) handleReset(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("RequestRecorder resetting")
+	if !rr.isStarted() {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("recorder is not started"))
+		return
+	}
+
+	rr.reset()
+
+	fmt.Println("RequestRecorder reset")
+
+	return
 }
 
 func (rr *RequestRecorder) isStarted() bool {
