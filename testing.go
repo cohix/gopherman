@@ -123,10 +123,6 @@ func makeRequest(client *http.Client, req *http.Request) (*postman.Response, err
 		return nil, err
 	}
 
-	if resp.StatusCode > 299 {
-		return nil, fmt.Errorf("request returned error statusCode: %d %s", resp.StatusCode, string(body))
-	}
-
 	actual := &postman.Response{
 		Mode:   "raw",
 		Raw:    string(body),
