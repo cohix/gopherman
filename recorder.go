@@ -118,7 +118,7 @@ func (rr *RequestRecorder) handleTerminate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	fmt.Printf("RequestRecorder wrote collection to %s", filepath)
+	fmt.Printf("RequestRecorder wrote collection to %s\n", filepath)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(collectionJSON)
